@@ -1,0 +1,11 @@
+version: '3.8'
+services:
+  nudge_backend_image:
+    container_name: nudge_backend
+    image: johedotcom/nudge-backend-repository:latest
+    restart: always
+    build: .
+    ports:
+     - "8000:80"
+    volumes:
+     - .:/app
