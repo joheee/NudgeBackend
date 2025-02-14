@@ -4,8 +4,5 @@ services:
     container_name: nudge_backend
     image: johedotcom/nudge-backend-repository:latest
     restart: always
-    build: .
     ports:
-     - "8000:80"
-    volumes:
-     - .:/app
+     - "7010:80"
