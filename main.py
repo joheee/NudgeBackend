@@ -7,16 +7,10 @@ import os
 
 app = FastAPI()
 
-# -------------------------
-# Supabase Initialization
-# -------------------------
 url: str = "https://tzopfeekvuztbabqbtmh.supabase.co"
 key: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6b3BmZWVrdnV6dGJhYnFidG1oIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTcyOTAyMjI3MiwiZXhwIjoyMDQ0NTk4MjcyfQ.gDfOTfCmogVIFwerLjCMY1b5YI5DvfE3OQlrrA9seCM"
 supabase: Client = create_client(url, key)
 
-# -------------------------
-# Global Multi-Armed Bandit State
-# -------------------------
 arms = {}         # Each key is a product_id with aggregated stats and bandit variables
 total_pulls = 0   # Total number of recommendations made
 
