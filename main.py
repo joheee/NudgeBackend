@@ -4,11 +4,13 @@ from typing import Union
 import random
 import math
 import os
+from dotenv import load_dotenv
 
 app = FastAPI()
+load_dotenv()
 
-url: str = "https://tzopfeekvuztbabqbtmh.supabase.co"
-key: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6b3BmZWVrdnV6dGJhYnFidG1oIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTcyOTAyMjI3MiwiZXhwIjoyMDQ0NTk4MjcyfQ.gDfOTfCmogVIFwerLjCMY1b5YI5DvfE3OQlrrA9seCM"
+url: str = os.getenv("SUPABASE_URL")
+key: str = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 
 arms = {}         # Each key is a product_id with aggregated stats and bandit variables
