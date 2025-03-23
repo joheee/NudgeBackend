@@ -1,3 +1,5 @@
-fastapi[standard]
+numpy
+pandas
 supabase
 python-dotenv
+fastapi[standard]
