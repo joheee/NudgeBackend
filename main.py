@@ -52,34 +52,40 @@ def nudgeMessage(product, content):
     return f"{content}"
 
 @app.get("/two-tower-data")
-def TwoTowerData():
+def two_tower_data():
     response = supabase.table(TWO_TOWER_TABLE).select("*", count="exact").execute()
     return response
 
 @app.get("/interaction-log-data")
-def InteractionLogData():
+def interaction_log_data():
     response = supabase.table(INTERACTION_LOG_TABLE).select("*", count="exact").execute()
     return response
 
 @app.get("/interaction-log-data/{state_id}")
-def InteractionLogDataByStateId(state_id: str):
+def interaction_log_data_bystate_id(state_id: str):
     response = supabase.table(INTERACTION_LOG_TABLE).select("*").eq("state_id", state_id).execute()
     return response.data
 
 @app.get("/product-recommendation/{state_id}")
-def ProductRecommendationByStateId(state_id:str):
+def product_recommendation_by_state_id(state_id:str):
     # Data awal
-    raw_data = TwoTowerData().data
+    raw_data = two_tower_data().data
     data = pd.DataFrame(raw_data)
     data['OverallScore'] = data['score']
     rewardFull = data.groupby(['user_id', 'product_title', 'content'])['OverallScore'].sum().reset_index()
 
     # Data interaction
-    raw_interaction_log = InteractionLogData().data
+    raw_interaction_log = interaction_log_data().data
     interaction_log = pd.DataFrame(raw_interaction_log).to_dict('records')
-
-    # Dictionaries utama
+    
     countDic, polDic, rewDic, recoCount = {}, {}, {}, {}
+    cumulative_reward_log = []
+    cumulative_regret_log = []
+    optimal_arm_counts = []
+
+    avg_rewards_per_product = rewardFull.groupby('product_title')['OverallScore'].mean().to_dict()
+    best_expected_reward = max(avg_rewards_per_product.values())
+    best_product = max(avg_rewards_per_product, key=avg_rewards_per_product.get)
 
     # Setup awal dari data
     users = list(rewardFull.user_id.unique())
@@ -107,17 +113,27 @@ def ProductRecommendationByStateId(state_id:str):
         sorted_policies = sorted(polDic[state_id].items(), key=lambda kv: kv[1], reverse=True)
         topProducts = [prod[0] for prod in sorted_policies[:nproducts]]
         seg_products = []
-
+    
+        # Tambahkan best arm di awal jika belum ada
+        if best_product in polDic[state_id] and best_product not in seg_products:
+            seg_products.append(best_product)
+    
         while len(seg_products) < nproducts:
             probability = np.random.rand()
             if probability >= epsilon and topProducts:
-                seg_products.append(topProducts.pop(0))
+                next_prod = topProducts.pop(0)
             else:
                 available_products = list(rewardFull['product_title'].unique())
                 available_products = [p for p in available_products if p not in seg_products]
                 if available_products:
-                    seg_products.append(sample(available_products, 1)[0])
-            seg_products = list(OrderedDict.fromkeys(seg_products))
+                    next_prod = sample(available_products, 1)[0]
+                else:
+                    break
+    
+            if next_prod not in seg_products:
+                seg_products.append(next_prod)
+    
+        seg_products = list(OrderedDict.fromkeys(seg_products))
         return seg_products
 
     nProducts = 5
@@ -144,19 +160,25 @@ def ProductRecommendationByStateId(state_id:str):
     return seg_products
 
 @app.post("/product-recommendation/{state_id}")
-def BuyProductByStateId(state_id:str, buy_list: List[str] = Body(default=["Asuransi Kesehatan", "Produk Emas"])):
+def buy_product_by_state_id(state_id:str, buy_list: List[str] = Body(default=["Tabungan Haji"])):
     # Data awal
-    raw_data = TwoTowerData().data
+    raw_data = two_tower_data().data
     data = pd.DataFrame(raw_data)
     data['OverallScore'] = data['score']
     rewardFull = data.groupby(['user_id', 'product_title', 'content'])['OverallScore'].sum().reset_index()
 
     # Data interaction
-    raw_interaction_log = InteractionLogData().data
+    raw_interaction_log = interaction_log_data().data
     interaction_log = pd.DataFrame(raw_interaction_log).to_dict('records')
-
-    # Dictionaries utama
+    
     countDic, polDic, rewDic, recoCount = {}, {}, {}, {}
+    cumulative_reward_log = []
+    cumulative_regret_log = []
+    optimal_arm_counts = []
+
+    avg_rewards_per_product = rewardFull.groupby('product_title')['OverallScore'].mean().to_dict()
+    best_expected_reward = max(avg_rewards_per_product.values())
+    best_product = max(avg_rewards_per_product, key=avg_rewards_per_product.get)
 
     # Setup awal dari data
     users = list(rewardFull.user_id.unique())
@@ -184,17 +206,27 @@ def BuyProductByStateId(state_id:str, buy_list: List[str] = Body(default=["Asura
         sorted_policies = sorted(polDic[state_id].items(), key=lambda kv: kv[1], reverse=True)
         topProducts = [prod[0] for prod in sorted_policies[:nproducts]]
         seg_products = []
-
+    
+        # Tambahkan best arm di awal jika belum ada
+        if best_product in polDic[state_id] and best_product not in seg_products:
+            seg_products.append(best_product)
+    
         while len(seg_products) < nproducts:
             probability = np.random.rand()
             if probability >= epsilon and topProducts:
-                seg_products.append(topProducts.pop(0))
+                next_prod = topProducts.pop(0)
             else:
                 available_products = list(rewardFull['product_title'].unique())
                 available_products = [p for p in available_products if p not in seg_products]
                 if available_products:
-                    seg_products.append(sample(available_products, 1)[0])
-            seg_products = list(OrderedDict.fromkeys(seg_products))
+                    next_prod = sample(available_products, 1)[0]
+                else:
+                    break
+    
+            if next_prod not in seg_products:
+                seg_products.append(next_prod)
+    
+        seg_products = list(OrderedDict.fromkeys(seg_products))
         return seg_products
 
     nProducts = 5
@@ -219,11 +251,13 @@ def BuyProductByStateId(state_id:str, buy_list: List[str] = Body(default=["Asura
         seg_products = sampProduct(nProducts, state_id, epsilon)
 
     def valueUpdater(seg_products, loc, custList, epsilon):
-        # Simpan reward/policy sebelum update
         reward_before = [rewDic[state_id].get(p, 0) for p in custList]
         policy_before = [polDic[state_id].get(p, 0) for p in custList]
 
-        # Update nilai
+        total_reward_this_round = 0.0
+        regret_this_round = 0.0
+        picked_best = False
+
         for prod in custList:
             if prod not in polDic[state_id]:
                 polDic[state_id][prod] = rewDic[state_id].get(prod, 0)
@@ -234,17 +268,20 @@ def BuyProductByStateId(state_id:str, buy_list: List[str] = Body(default=["Asura
 
             rew = GaussianDistribution(loc=loc, scale=0.5, size=1)[0].round(2)
             rewDic[state_id][prod] += rew
-
             polDic[state_id][prod] += (1 / recoCount[state_id][prod]) * (rew - polDic[state_id][prod])
             recoCount[state_id][prod] += 1
 
+            total_reward_this_round += rew
+            expected_reward = avg_rewards_per_product.get(prod, 0)
+            regret_this_round += (best_expected_reward - expected_reward)
+
+            if prod == best_product:
+                picked_best = True
+
             epsilon = max(0.01, epsilon * 0.95)
 
-        # Simpan reward/policy setelah update
         reward_after = [rewDic[state_id][p] for p in custList]
         policy_after = [polDic[state_id][p] for p in custList]
-
-        # Buat next recommendation satu kali
         next_recommended = sampProduct(nProducts, state_id, epsilon)
 
         interaction_entry = {
@@ -256,15 +293,58 @@ def BuyProductByStateId(state_id:str, buy_list: List[str] = Body(default=["Asura
             "policy_before": policy_before,
             "reward_after": reward_after,
             "policy_after": policy_after,
-            "next_recommended": next_recommended
+            "next_recommended": next_recommended,
+            "total_reward": total_reward_this_round,
+            "cumulative_regret": regret_this_round,
+            "picked_best_arm": picked_best
         }
 
-        # Kirim ke Supabase
-        supabase.table("interaction_log").insert(interaction_entry).execute()
+        interaction_log.append(interaction_entry)
+        cumulative_reward_log.append(total_reward_this_round)
+        cumulative_regret_log.append(regret_this_round)
+        optimal_arm_counts.append(int(picked_best))
+
+        supabase.table("interaction_log").insert({
+            "timestamp": interaction_entry["timestamp"],
+            "state_id": interaction_entry["state_id"],
+            "product_offered": interaction_entry["product_offered"],
+            "product_bought": interaction_entry["product_bought"],
+            "reward_before": interaction_entry["reward_before"],
+            "policy_before": interaction_entry["policy_before"],
+            "reward_after": interaction_entry["reward_after"],
+            "policy_after": interaction_entry["policy_after"],
+            "next_recommended": interaction_entry["next_recommended"]
+        }).execute()
 
         return next_recommended, epsilon
     
     seg_products, epsilon = valueUpdater(seg_products, 5, buy_list, epsilon)
+    n_new = len(cumulative_reward_log)
+    new_interactions = interaction_log[-n_new:] 
     
-    return {"update_rewards":dict(sorted(rewDic[state_id].items(), key=lambda x: x[1], reverse=True)),
-    "update_policies": dict(sorted(polDic[state_id].items(), key=lambda x: x[1], reverse=True))}
+    reward_policy_df = pd.DataFrame({
+        "product_title": list(rewDic[state_id].keys()),
+        "updated_reward": list(rewDic[state_id].values()),
+        "updated_policy": [polDic[state_id].get(p, 0) for p in rewDic[state_id].keys()],
+        "state_id": state_id,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })    
+
+    performance_df = pd.DataFrame({
+        "timestamp": [entry["timestamp"] for entry in new_interactions],
+        "state_id": [entry["state_id"] for entry in new_interactions],
+        "total_reward": cumulative_reward_log,
+        "cumulative_regret": cumulative_regret_log,
+        "picked_best_arm": optimal_arm_counts
+    })
+
+    reward_policy_data = reward_policy_df.to_dict(orient='records')
+    supabase.table("reward_policy_log").insert(reward_policy_data).execute()
+
+    performance_data = performance_df.to_dict(orient="records")
+    supabase.table("performance_log").insert(performance_data).execute()
+
+    return {
+        "update_rewards":dict(sorted(rewDic[state_id].items(), key=lambda x: x[1], reverse=True)),
+        "update_policies": dict(sorted(polDic[state_id].items(), key=lambda x: x[1], reverse=True))
+    }
