@@ -5,11 +5,11 @@ import numpy as np
 import pandas as pd
 from typing import List
 from fastapi import Body
-from typing import Union
 from random import sample
 from fastapi import FastAPI
 from datetime import datetime
 from dotenv import load_dotenv
+from typing import Union, Optional
 from collections import OrderedDict
 from supabase import create_client, Client
 
@@ -31,45 +31,57 @@ EPSILON = 0.01
 def GaussianDistribution(loc, scale, size):
     return np.random.normal(loc, scale, size)
 
-def sampProduct(state_id, nproducts=N_PRODUCT, epsilon=EPSILON):
-    sorted_policies = sorted(polDic[state_id].items(), key=lambda kv: kv[1], reverse=True)
-    topProducts = [prod[0] for prod in sorted_policies[:nproducts]]
-    seg_products = []
-
-    while len(seg_products) < nproducts:
-        probability = np.random.rand()
-        if probability >= epsilon and topProducts:
-            seg_products.append(topProducts.pop(0))
-        else:
-            available_products = list(rewardFull['product_title'].unique())
-            available_products = [p for p in available_products if p not in seg_products]
-            if available_products:
-                seg_products.append(sample(available_products, 1)[0])
-        seg_products = list(OrderedDict.fromkeys(seg_products))
-    return seg_products
-
-def nudgeMessage(product, content):
-    return f"{content}"
-
-@app.get("/two-tower-data")
-def two_tower_data():
-    response = supabase.table(TWO_TOWER_TABLE).select("*", count="exact").execute()
-    return response
-
-@app.get("/interaction-log-data")
 def interaction_log_data():
     response = supabase.table(INTERACTION_LOG_TABLE).select("*", count="exact").execute()
     return response
 
-@app.get("/interaction-log-data/{state_id}")
 def interaction_log_data_bystate_id(state_id: str):
     response = supabase.table(INTERACTION_LOG_TABLE).select("*").eq("state_id", state_id).execute()
     return response.data
 
+def two_tower_data(risk_level: Optional[str] = "High"):
+    if risk_level == "High":
+        risk_filter = ["High", "Moderate", "Conventional"]
+    elif risk_level == "Moderate":
+        risk_filter = ["Moderate", "Conventional"]
+    elif risk_level == "Conventional":
+        risk_filter = ["Conventional"]
+    else:
+        risk_filter = None
+
+    query = supabase.table(TWO_TOWER_TABLE).select("*", count="exact")
+    if risk_filter:
+        query = query.in_("risklevel", risk_filter)
+    
+    response = query.execute()
+    return response
+
+@app.get("/two-tower-data-count")
+def two_tower_data_count(risk_level: Optional[str] = "High"):
+    if risk_level == "High":
+        risk_filter = ["High", "Moderate", "Conventional"]
+    elif risk_level == "Moderate":
+        risk_filter = ["Moderate", "Conventional"]
+    elif risk_level == "Conventional":
+        risk_filter = ["Conventional"]
+    else:
+        risk_filter = None
+
+    query = supabase.table(TWO_TOWER_TABLE).select("*", count="exact")
+    if risk_filter:
+        query = query.in_("risklevel", risk_filter)
+    
+    response = query.execute()
+    return {
+        'risk_level': risk_level,
+        'risk_filter': risk_filter,
+        'count': response.count
+    }
+
 @app.get("/product-recommendation/{state_id}")
-def product_recommendation_by_state_id(state_id:str):
+def product_recommendation_by_state_id(state_id:str, risk_level: Optional[str] = "High"):
     # Data awal
-    raw_data = two_tower_data().data
+    raw_data = two_tower_data(risk_level).data
     data = pd.DataFrame(raw_data)
     data['OverallScore'] = data['score']
     rewardFull = data.groupby(['user_id', 'product_title', 'content'])['OverallScore'].sum().reset_index()
@@ -321,7 +333,7 @@ def buy_product_by_state_id(state_id:str, buy_list: List[str] = Body(default=["T
     seg_products, epsilon = valueUpdater(seg_products, 5, buy_list, epsilon)
     n_new = len(cumulative_reward_log)
     new_interactions = interaction_log[-n_new:] 
-    
+
     reward_policy_df = pd.DataFrame({
         "product_title": list(rewDic[state_id].keys()),
         "updated_reward": list(rewDic[state_id].values()),
