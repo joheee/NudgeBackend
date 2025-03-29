@@ -39,49 +39,15 @@ def interaction_log_data_bystate_id(state_id: str):
     response = supabase.table(INTERACTION_LOG_TABLE).select("*").eq("state_id", state_id).execute()
     return response.data
 
-def two_tower_data(risk_level: Optional[str] = "High"):
-    if risk_level == "High":
-        risk_filter = ["High", "Moderate", "Conventional"]
-    elif risk_level == "Moderate":
-        risk_filter = ["Moderate", "Conventional"]
-    elif risk_level == "Conventional":
-        risk_filter = ["Conventional"]
-    else:
-        risk_filter = None
-
+def two_tower_data():
     query = supabase.table(TWO_TOWER_TABLE).select("*", count="exact")
-    if risk_filter:
-        query = query.in_("risklevel", risk_filter)
-    
     response = query.execute()
     return response
 
-@app.get("/two-tower-data-count")
-def two_tower_data_count(risk_level: Optional[str] = "High"):
-    if risk_level == "High":
-        risk_filter = ["High", "Moderate", "Conventional"]
-    elif risk_level == "Moderate":
-        risk_filter = ["Moderate", "Conventional"]
-    elif risk_level == "Conventional":
-        risk_filter = ["Conventional"]
-    else:
-        risk_filter = None
-
-    query = supabase.table(TWO_TOWER_TABLE).select("*", count="exact")
-    if risk_filter:
-        query = query.in_("risklevel", risk_filter)
-    
-    response = query.execute()
-    return {
-        'risk_level': risk_level,
-        'risk_filter': risk_filter,
-        'count': response.count
-    }
-
 @app.get("/product-recommendation/{state_id}")
-def product_recommendation_by_state_id(state_id:str, risk_level: Optional[str] = "High"):
+def product_recommendation_by_state_id(state_id:str):
     # Data awal
-    raw_data = two_tower_data(risk_level).data
+    raw_data = two_tower_data().data
     data = pd.DataFrame(raw_data)
     data['OverallScore'] = data['score']
     rewardFull = data.groupby(['user_id', 'product_title', 'content'])['OverallScore'].sum().reset_index()
@@ -346,7 +312,7 @@ def buy_product_by_state_id(state_id:str, buy_list: List[str] = Body(default=["T
         "timestamp": [entry["timestamp"] for entry in new_interactions],
         "state_id": [entry["state_id"] for entry in new_interactions],
         "total_reward": cumulative_reward_log,
-        "cumulative_regret": cumulative_regret_log,
+        "cumulative_regret": cumulative_regret_log, 
         "picked_best_arm": optimal_arm_counts
     })
 
