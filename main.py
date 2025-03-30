@@ -22,12 +22,10 @@ key: str = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 
 # Constants for table names
-TWO_TOWER_TABLE = "temp_ik_resultsnudgetwscorefinal"
+TWO_TOWER_TABLE = "temp_ik_resultsnudgetwscore"
 INTERACTION_LOG_TABLE = "interaction_log"
 REWARD_POLICY_LOG_TABLE = "reward_policy_log"
 PERFORMANCE_LOG_TABLE = "performance_log"
-N_PRODUCT = 5
-EPSILON = 0.01
 
 # Utility function
 def GaussianDistribution(loc, scale, size):
