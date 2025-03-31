@@ -153,7 +153,7 @@ def product_recommendation_by_state_id(state_id:str):
     else:
         seg_products = sampProduct(nProducts, state_id, epsilon)
 
-    products = supabase.table("nudge_product").select("*").in_("product_title", seg_products).execute()
+    products = supabase.table("nudge_product").select("*").in_("product_title", seg_products).order("nudge_info", desc=True).execute()
     return products.data
 
 @app.post("/product-recommendation/{state_id}")
