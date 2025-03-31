@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from typing import Union, Optional
 from collections import OrderedDict
 from supabase import create_client, Client
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 load_dotenv()
