@@ -154,7 +154,9 @@ def product_recommendation_by_state_id(state_id:str):
         seg_products = sampProduct(nProducts, state_id, epsilon)
 
     products = supabase.table("nudge_product").select("*").in_("product_title", seg_products).execute()
-    return products.data
+    ordered_products = sorted(products.data, key=lambda x: seg_products.index(x["product_title"]))
+    return ordered_products
+
 
 @app.post("/product-recommendation/{state_id}")
 def buy_product_by_state_id(state_id:str, buy_list: List[str] = Body(default=["Tabungan Haji"])):
