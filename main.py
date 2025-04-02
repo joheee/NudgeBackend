@@ -89,20 +89,15 @@ def product_recommendation_by_state_id(state_id:str):
         subset = rewardFull[rewardFull['user_id'] == id]
         countDic[id] = {row['product_title']: int(row['OverallScore']) for _, row in subset.iterrows()}
 
-    def nudgeMessage(product, content):
-        return f"{content}"
-
     # Fungsi sampling produk menggunakan epsilon-greedy
     def sampProduct(nproducts, state_id, epsilon):
         sorted_policies = sorted(polDic[state_id].items(), key=lambda kv: kv[1], reverse=True)
         topProducts = [prod[0] for prod in sorted_policies[:nproducts]]
         seg_products = []
 
-        # Tambahkan produk terbaik ke dalam rekomendasi jika belum ada
         if best_product in polDic[state_id] and best_product not in seg_products:
             seg_products.append(best_product)
 
-        # Sampling produk dengan probabilitas eksplorasi
         while len(seg_products) < nproducts:
             probability = np.random.rand()
             if probability >= epsilon and topProducts:
@@ -119,7 +114,7 @@ def product_recommendation_by_state_id(state_id:str):
 
         return list(OrderedDict.fromkeys(seg_products))
 
-    # Inisialisasi struktur data jika state_id baru
+    # Mulai sesi interaksi
     if state_id not in countDic:
         countDic[state_id] = {}
     if state_id not in polDic:
@@ -129,11 +124,9 @@ def product_recommendation_by_state_id(state_id:str):
     if state_id not in recoCount:
         recoCount[state_id] = {}
 
-    # Cek apakah user ini sudah pernah interaksi sebelumnya
     previous_entries = [entry for entry in interaction_log if entry['state_id'] == state_id]
     is_new_user = len(previous_entries) == 0
 
-    # Cold start: inisialisasi estimasi reward dengan noise
     if not countDic[state_id]:
         for product in avg_rewards_per_product:
             countDic[state_id][product] = 0
@@ -142,7 +135,6 @@ def product_recommendation_by_state_id(state_id:str):
             rewDic[state_id][product] = 0
             recoCount[state_id][product] = 1
 
-    # Update distribusi jika belum ada
     for pkey in countDic[state_id].keys():
         if pkey not in polDic[state_id]:
             polDic[state_id][pkey] = GaussianDistribution(loc=countDic[state_id][pkey], scale=1, size=1)[0].round(2)
@@ -152,7 +144,6 @@ def product_recommendation_by_state_id(state_id:str):
     nProducts = 5
     epsilon = 0.3 if is_new_user else 0.01
 
-    # Gunakan rekomendasi sebelumnya jika tersedia
     if previous_entries:
         last_entry = previous_entries[-1]
         next_data = last_entry['next_recommended']
@@ -181,53 +172,25 @@ def buy_product_by_state_id(state_id:str, buy_list: List[str] = Body(default=["T
     raw_interaction_log = interaction_log_data().data
     interaction_log = pd.DataFrame(raw_interaction_log).to_dict('records')
     
+    # Inisialisasi dictionary untuk menyimpan statistik
     countDic, polDic, rewDic, recoCount = {}, {}, {}, {}
     cumulative_reward_log = []
     cumulative_regret_log = []
     optimal_arm_counts = []
 
+    # Hitung rata-rata reward per produk
     avg_rewards_per_product = rewardFull.groupby('product_title')['OverallScore'].mean().to_dict()
     top5_avg_rewards = sorted(avg_rewards_per_product.values(), reverse=True)[:5]
     best_expected_reward = sum(top5_avg_rewards) / len(top5_avg_rewards)
     best_product = max(avg_rewards_per_product, key=avg_rewards_per_product.get)
 
-    # Setup awal dari data
+    # Inisialisasi reward awal berdasarkan data historis
     users = list(rewardFull.user_id.unique())
     for id in users:
         subset = rewardFull[rewardFull['user_id'] == id]
         countDic[id] = {row['product_title']: int(row['OverallScore']) for _, row in subset.iterrows()}
 
-    if state_id not in countDic:
-        countDic[state_id] = {}
-    if state_id not in polDic:
-        polDic[state_id] = {}
-    if state_id not in rewDic:
-        rewDic[state_id] = {}
-    if state_id not in recoCount:
-        recoCount[state_id] = {}
-
-    # Cek interaksi sebelumnya
-    previous_entries = [entry for entry in interaction_log if entry['state_id'] == state_id]
-    is_new_user = len(previous_entries) == 0
-
-    # Cold-start: inisialisasi policy dengan reward rata-rata + noise
-    if not countDic[state_id]:
-        for product in avg_rewards_per_product:
-            countDic[state_id][product] = 0
-            noise = np.random.normal(loc=0.0, scale=1.0)
-            polDic[state_id][product] = avg_rewards_per_product[product] + noise
-            rewDic[state_id][product] = 0
-            recoCount[state_id][product] = 1
-
-    # Update distribusi awal jika belum ada
-    prodCounts = countDic[state_id]
-    for pkey in prodCounts.keys():
-        if pkey not in polDic[state_id]:
-            polDic[state_id][pkey] = GaussianDistribution(loc=prodCounts[pkey], scale=1, size=1)[0].round(2)
-        if pkey not in rewDic[state_id]:
-            rewDic[state_id][pkey] = GaussianDistribution(loc=prodCounts[pkey], scale=1, size=1)[0].round(2)
-
-    # Fungsi untuk sampling produk rekomendasi (epsilon-greedy)
+    # Fungsi sampling produk menggunakan epsilon-greedy
     def sampProduct(nproducts, state_id, epsilon):
         sorted_policies = sorted(polDic[state_id].items(), key=lambda kv: kv[1], reverse=True)
         topProducts = [prod[0] for prod in sorted_policies[:nproducts]]
@@ -250,13 +213,38 @@ def buy_product_by_state_id(state_id:str, buy_list: List[str] = Body(default=["T
             if next_prod not in seg_products:
                 seg_products.append(next_prod)
 
-        seg_products = list(OrderedDict.fromkeys(seg_products))
-        return seg_products
+        return list(OrderedDict.fromkeys(seg_products))
+
+    # Mulai sesi interaksi
+    if state_id not in countDic:
+        countDic[state_id] = {}
+    if state_id not in polDic:
+        polDic[state_id] = {}
+    if state_id not in rewDic:
+        rewDic[state_id] = {}
+    if state_id not in recoCount:
+        recoCount[state_id] = {}
+
+    previous_entries = [entry for entry in interaction_log if entry['state_id'] == state_id]
+    is_new_user = len(previous_entries) == 0
+
+    if not countDic[state_id]:
+        for product in avg_rewards_per_product:
+            countDic[state_id][product] = 0
+            noise = np.random.normal(loc=0.0, scale=1.0)
+            polDic[state_id][product] = avg_rewards_per_product[product] + noise
+            rewDic[state_id][product] = 0
+            recoCount[state_id][product] = 1
+
+    for pkey in countDic[state_id].keys():
+        if pkey not in polDic[state_id]:
+            polDic[state_id][pkey] = GaussianDistribution(loc=countDic[state_id][pkey], scale=1, size=1)[0].round(2)
+        if pkey not in rewDic[state_id]:
+            rewDic[state_id][pkey] = GaussianDistribution(loc=countDic[state_id][pkey], scale=1, size=1)[0].round(2)
 
     nProducts = 5
     epsilon = 0.3 if is_new_user else 0.01
 
-    # Jika ada interaksi sebelumnya, gunakan next recommended
     if previous_entries:
         last_entry = previous_entries[-1]
         next_data = last_entry['next_recommended']
@@ -279,7 +267,6 @@ def buy_product_by_state_id(state_id:str, buy_list: List[str] = Body(default=["T
         picked_best = False
 
         for prod in custList:
-            # Inisialisasi jika produk baru
             if prod not in rewDic[state_id]:
                 rewDic[state_id][prod] = 0.0
             if prod not in polDic[state_id]:
@@ -287,7 +274,6 @@ def buy_product_by_state_id(state_id:str, buy_list: List[str] = Body(default=["T
             if prod not in recoCount[state_id]:
                 recoCount[state_id][prod] = 1
 
-            # Sampling reward simulasi (reward environment)
             rew = GaussianDistribution(loc=loc, scale=0.5, size=1)[0].round(2)
             rewDic[state_id][prod] += rew
             polDic[state_id][prod] += (1 / recoCount[state_id][prod]) * (rew - polDic[state_id][prod])
@@ -306,7 +292,6 @@ def buy_product_by_state_id(state_id:str, buy_list: List[str] = Body(default=["T
         policy_after = [polDic[state_id][p] for p in custList]
         next_recommended = sampProduct(nProducts, state_id, epsilon)
 
-        # Log interaksi
         interaction_entry = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "state_id": state_id,
@@ -326,8 +311,7 @@ def buy_product_by_state_id(state_id:str, buy_list: List[str] = Body(default=["T
         )
         optimal_arm_counts.append(int(picked_best))
 
-        # Simpan ke Supabase
-        supabase.table(INTERACTION_LOG_TABLE).insert(interaction_entry).execute()
+        supabase.table("interaction_log").insert(interaction_entry).execute()
         return next_recommended, epsilon
     
     seg_products, epsilon = valueUpdater(seg_products, 5, buy_list, epsilon)
@@ -346,8 +330,12 @@ def buy_product_by_state_id(state_id:str, buy_list: List[str] = Body(default=["T
         "timestamp": [entry["timestamp"] for entry in new_interactions],
         "state_id": [entry["state_id"] for entry in new_interactions],
         "total_reward": cumulative_reward_log,
-        "cumulative_regret": cumulative_regret_log, 
-        "picked_best_arm": optimal_arm_counts
+        "cumulative_regret": cumulative_regret_log,
+        "picked_best_arm": optimal_arm_counts,
+        "picked_from_recommendation": [
+            any(prod in entry["product_offered"] for prod in entry["product_bought"])
+            for entry in new_interactions
+        ]
     })
 
     reward_policy_data = reward_policy_df.to_dict(orient='records')
